@@ -3,6 +3,8 @@
 #include "Skiplist.cpp"
 #include "kvstore_api.h"
 #include "SSTable.h"
+#include "Compaction.cpp"
+#include <algorithm>
 
 class KVStore : public KVStoreAPI {
 	// You can add your implementation here
@@ -10,6 +12,7 @@ public:
 	Skiplist* MemTable;
 	vector<vector<SSTable*>> SSTableList;
 	int timestamp;
+	int id;
 	std::string directory;
 
 public:
@@ -27,6 +30,12 @@ public:
 
 	void scan(uint64_t key1, uint64_t key2, std::list<std::pair<uint64_t, std::string> > &list) override;
 
-private:
+public:
 	void init();
+
+	void compact(int level);
+
+	vector<SSTable*> choose_files(int level);
+
+	void check_compaction();
 };

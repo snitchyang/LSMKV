@@ -18,6 +18,7 @@ public:
 	pair<ull, int>* index;
 	char* data;
 	int level;
+	int id;
 	string dir;
 
 	SSTable();

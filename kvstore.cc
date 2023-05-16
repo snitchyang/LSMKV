@@ -8,7 +8,7 @@ KVStore::KVStore(const std::string &dir) : KVStoreAPI(dir)
 {
 	MemTable = new Skiplist;
 	directory = dir;
-	timestamp = 0;
+	timestamp = -1;
 	init();
 }
 
@@ -20,6 +20,7 @@ KVStore::~KVStore()
 	{
 		SSTableList[0].push_back(new SSTable(*MemTable, timestamp, directory, 0));
 		SSTableList[0].back()->write();
+		check_compaction();
 		timestamp++;
 	}
 }
@@ -42,6 +43,7 @@ void KVStore::put(uint64_t key, const std::string &s)
 		timestamp++;
 		delete MemTable;
 		MemTable = new Skiplist;
+		check_compaction();
 	}
 	MemTable->add(key, s);
 }
@@ -140,6 +142,7 @@ void KVStore::init()
 	}
 	for (int i = 0; i < level; i++)
 	{
+		int temp_timestamp;
 		SSTableList.push_back(vector<SSTable *>());
 		if ((dir = opendir((directory + "/" + "level-" + to_string(i)).c_str())) != NULL)
 		{
@@ -149,9 +152,113 @@ void KVStore::init()
 				if (strstr(ent->d_name, ".sst") != NULL)
 				{
 					SSTableList[i].push_back(new SSTable(directory, ent->d_name, i));
+					char *p = strtok(ent->d_name, ".");
+					temp_timestamp = atoi(p);
+					SSTableList[i].back()->timestamp = temp_timestamp;
+					if (temp_timestamp > timestamp)
+						timestamp = temp_timestamp;
 				}
 			}
 			closedir(dir);
 		}
 	}
+	timestamp++;
+}
+
+void KVStore::compact(int level)
+{
+	vector<KVWithTimestamp *> res;
+	// choose files to compact
+	vector<SSTable *> files_to_compact = choose_files(level);
+	res = compactToVector(files_to_compact, level);
+	// find max timestamp
+	ull max_timestamp = 0;
+	for (auto p : res)
+	{
+		if (p->timestamp > max_timestamp)
+			max_timestamp = p->timestamp;
+	}
+
+	// write to disk
+	Skiplist *skiplist = new Skiplist();
+	for (int i = 0; i < res.size(); i++)
+	{
+		if (skiplist->total_length + res[i]->value.length() > 2 * 1024 * 1024 - 10240 - 8 * 4 - sizeof(pair<uint64_t, string>) * skiplist->size - 1000)
+		{
+			// flush to disk
+			SSTable *sst = new SSTable(*skiplist, max_timestamp, this->directory, level + 1);
+			sst->write();
+			if (SSTableList.size() <= level + 1)
+			{
+				SSTableList.push_back(vector<SSTable *>());
+			}
+			SSTableList[level + 1].push_back(sst);
+			delete skiplist;
+			skiplist = new Skiplist();
+		}
+		skiplist->add(res[i]->key, res[i]->value);
+	}
+	SSTable *sst = new SSTable(*skiplist, max_timestamp, this->directory, level + 1);
+	sst->write();
+	if (SSTableList.size() <= level + 1)
+	{
+		SSTableList.push_back(vector<SSTable *>());
+	}
+	SSTableList[level + 1].push_back(sst);
+	delete skiplist;
+}
+
+vector<SSTable *> KVStore::choose_files(int level)
+{
+	vector<SSTable *> res;
+	if (level == 0)
+	{
+		// add all the files in level0 to be compacted
+		res = SSTableList[0];
+		SSTableList[0].clear();
+	}
+	else
+	{
+		// sort SSTableList[level] by timestamp
+		sort(SSTableList[level].begin(), SSTableList[level].end(), [](SSTable *a, SSTable *b)
+			 { return a->timestamp < b->timestamp; });
+		// choose the files with the smallest timestamp
+		int current_size = SSTableList[level].size();
+		for (int i = 0; i < current_size - pow(2, level + 1); i++)
+		{
+			res.push_back(SSTableList[level][0]);
+			SSTableList[level].erase(SSTableList[level].begin());
+		}
+	}
+	// get the min and max key of the SSTables
+	ull min_key = INT64_MAX, max_key = 0;
+	for (auto sst : res)
+	{
+		if (sst->min_key < min_key)
+			min_key = sst->min_key;
+		if (sst->max_key > max_key)
+			max_key = sst->max_key;
+	}
+	if (SSTableList.size() <= level + 1)
+		SSTableList.push_back(vector<SSTable *>());
+	// choose files with overlapping keys in level + 1
+	for (auto sst : SSTableList[level + 1])
+	{
+		if (sst->min_key <= max_key && sst->max_key >= min_key)
+			res.push_back(sst);
+	}
+	return res;
+}
+
+void KVStore::check_compaction()
+{
+	// int level_number = SSTableList.size();
+	// for (int i = 0; i < level_number; i++)
+	// {
+	// 	if (SSTableList[i].size() > pow(2, i + 1))
+	// 	{
+	// 		compact(i);
+	// 	}
+	// 	level_number = SSTableList.size();
+	// }
 }

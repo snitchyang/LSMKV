@@ -1,7 +1,7 @@
 #pragma once
 #include <iostream>
+#include "Skiplist.cpp"
 #include "SSTable.h"
-
 struct KVWithTimestamp{
     ull key;
     string value;
@@ -9,8 +9,10 @@ struct KVWithTimestamp{
     //constructor
     KVWithTimestamp(ull key, string value, ull timestamp):key(key), value(value),timestamp(timestamp){}
 };
+inline vector<KVWithTimestamp*> merge(vector<vector<KVWithTimestamp*>> data);
+inline vector<KVWithTimestamp*> compactToVector(const vector<SSTable*>& SSTableList, int level);
 
-void compact(const vector<SSTable*>& SSTableList, int level){
+vector<KVWithTimestamp*> compactToVector(const vector<SSTable*>& SSTableList, int level){
     //store data in SSTablelist in a vector
     vector<vector<KVWithTimestamp*>> data;
     for(auto sst : SSTableList){
@@ -20,8 +22,13 @@ void compact(const vector<SSTable*>& SSTableList, int level){
             data.back().push_back(new KVWithTimestamp(p.first, p.second, sst->timestamp));
         }
         delete v;
+        remove((sst->dir + "/" + "level-" + to_string(sst->level) + "/" + to_string(sst->timestamp) + ".sst").c_str());
     }
+    //merge
+    vector<KVWithTimestamp*> res = merge(data);
+    return res;
 }
+
 
 vector<KVWithTimestamp*> merge(vector<vector<KVWithTimestamp*>> data){
     if(data.size() == 1)
@@ -64,4 +71,7 @@ vector<KVWithTimestamp*> merge(vector<vector<KVWithTimestamp*>> data){
     }
     return res;
 }
+
+
+
 
