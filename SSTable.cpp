@@ -50,8 +50,8 @@ SSTable::SSTable(const Skiplist &skiplist, ull _timestamp, const string& _dir, i
 SSTable::SSTable(const string &_dir, const string& sst_filename, int _level)
 {
     level = _level;
-    dir = _dir;
-    ifstream file(dir + "/" + "level-" + to_string(level) + "/" + sst_filename, ios::binary | ios::in);
+    dir = _dir + "/" + "level-" + to_string(level) + "/" + sst_filename;
+    ifstream file(dir, ios::binary | ios::in);
     file.read((char*)(&timestamp), sizeof(ull));
     file.read((char*)(&kv_number), sizeof(ull));
     file.read((char*)(&min_key), sizeof(ull));
@@ -64,12 +64,12 @@ SSTable::SSTable(const string &_dir, const string& sst_filename, int _level)
 
 void SSTable::write()
 {
-    ofstream file(dir + "/" + "level-" + to_string(level) + "/" + to_string(timestamp) + ".sst", ios::binary | ios::out);
+    ofstream file(dir, ios::binary | ios::out);
     if(!file.is_open()){
         //create the directory
-        string cmd = "mkdir " + dir + "/" + "level-" + to_string(level);
+        string cmd = "mkdir " + dir.substr(0, dir.find_last_of('/'));
         system(cmd.c_str());
-        file.open(dir + "/" + "level-" + to_string(level) + "/" + to_string(timestamp) + ".sst", ios::binary | ios::out);
+        file.open(dir, ios::binary | ios::out);
     }
     file.write((char*)this, 4*8+10240);
     file.write((char*)index, kv_number * sizeof(pair<ull, int>));
@@ -101,7 +101,7 @@ string SSTable::get_value(pair<ull, int> *index)
     string res;
     //read data from .sst file
     if (index) {
-        ifstream file(dir + "/" + "level-" + to_string(level) + "/" + to_string(timestamp) + ".sst", ios::binary | ios::in);
+        ifstream file(dir, ios::binary | ios::in);
         int offset = index->second;
         file.seekg(4 * 8 + 10240 + kv_number * sizeof(pair<ull, int>) + offset);
         char* str = new char[0x200000 - 4 * 8 - 10240 - kv_number * sizeof(pair<ull, int>)];
@@ -127,7 +127,7 @@ string SSTable::get_value(pair<ull, int> *index)
 vector<pair<ull, string>>* SSTable::getAllData()
 {
     vector<pair<ull, string>>* res = new vector<pair<ull, string>>();
-    ifstream file(dir + "/" + "level-" + to_string(level) + "/" + to_string(timestamp) + ".sst", ios::binary | ios::in);
+    ifstream file(dir, ios::binary | ios::in);
     int offset = 0;
     for (ull i = 0; i < kv_number; i++) {
         string value = get_value(index + i);

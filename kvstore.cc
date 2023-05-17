@@ -38,7 +38,7 @@ void KVStore::put(uint64_t key, const std::string &s)
 	if (MemTable->total_length + s.length() > 2 * 1024 * 1024 - 10240 - 8 * 4 - sizeof(pair<uint64_t, string>) * MemTable->size - 1000)
 	{
 		// flush to disk
-		SSTableList[0].push_back(new SSTable(*MemTable, timestamp, directory, 0));
+		SSTableList[0].push_back(new SSTable(*MemTable, timestamp, directory + "/" + "level-0" + "/" + to_string(timestamp) + ".sst", 0));
 		SSTableList[0].back()->write();
 		timestamp++;
 		delete MemTable;
